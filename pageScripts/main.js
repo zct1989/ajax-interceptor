@@ -1,8 +1,7 @@
-
-let replacer = (beforeText:string)=>{
-  const reg = /长乐分院/g
-  return beforeText.replace(reg,'')
-}
+let replacer = function (beforeText) {
+  const reg = /长乐分院/g;
+  return beforeText.replace(reg, "");
+};
 
 // 命名空间
 let ajax_interceptor_qoweifjqon = {
@@ -11,27 +10,31 @@ let ajax_interceptor_qoweifjqon = {
     ajaxInterceptor_rules: [],
   },
   originalXHR: window.XMLHttpRequest,
-  myXHR: function() {
+  myXHR: function () {
     let pageScriptEventDispatched = false;
     const modifyResponse = () => {
-      ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.forEach(({switchOn = true, match, overrideTxt = ''}) => {
-        if (switchOn && match && this.responseURL.indexOf(match) > -1) {
-          this.responseText = replacer(this.responseText );
-          this.response = replacer(this.responseText );
-          
-          if (!pageScriptEventDispatched) {
-            window.dispatchEvent(new CustomEvent("pageScript", {
-              detail: {url: this.responseURL, match}
-            }));
-            pageScriptEventDispatched = true;
+      ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.forEach(
+        ({ switchOn = true, match, overrideTxt = "" }) => {
+          if (switchOn && match && this.responseURL.indexOf(match) > -1) {
+            this.responseText = replacer(this.responseText);
+            this.response = replacer(this.responseText);
+
+            if (!pageScriptEventDispatched) {
+              window.dispatchEvent(
+                new CustomEvent("pageScript", {
+                  detail: { url: this.responseURL, match },
+                })
+              );
+              pageScriptEventDispatched = true;
+            }
           }
         }
-      })
-    }
-    
-    const xhr = new ajax_interceptor_qoweifjqon.originalXHR;
+      );
+    };
+
+    const xhr = new ajax_interceptor_qoweifjqon.originalXHR();
     for (let attr in xhr) {
-      if (attr === 'onreadystatechange') {
+      if (attr === "onreadystatechange") {
         xhr.onreadystatechange = (...args) => {
           if (this.readyState == 4) {
             // 请求成功
@@ -41,9 +44,9 @@ let ajax_interceptor_qoweifjqon = {
             }
           }
           this.onreadystatechange && this.onreadystatechange.apply(this, args);
-        }
+        };
         continue;
-      } else if (attr === 'onload') {
+      } else if (attr === "onload") {
         xhr.onload = (...args) => {
           // 请求成功
           if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
@@ -51,25 +54,26 @@ let ajax_interceptor_qoweifjqon = {
             modifyResponse();
           }
           this.onload && this.onload.apply(this, args);
-        }
+        };
         continue;
       }
-  
-      if (typeof xhr[attr] === 'function') {
+
+      if (typeof xhr[attr] === "function") {
         this[attr] = xhr[attr].bind(xhr);
       } else {
         // responseText和response不是writeable的，但拦截时需要修改它，所以修改就存储在this[`_${attr}`]上
-        if (attr === 'responseText' || attr === 'response') {
+        if (attr === "responseText" || attr === "response") {
           Object.defineProperty(this, attr, {
-            get: () => this[`_${attr}`] == undefined ? xhr[attr] : this[`_${attr}`],
-            set: (val) => this[`_${attr}`] = val,
-            enumerable: true
+            get: () =>
+              this[`_${attr}`] == undefined ? xhr[attr] : this[`_${attr}`],
+            set: (val) => (this[`_${attr}`] = val),
+            enumerable: true,
           });
         } else {
           Object.defineProperty(this, attr, {
             get: () => xhr[attr],
-            set: (val) => xhr[attr] = val,
-            enumerable: true
+            set: (val) => (xhr[attr] = val),
+            enumerable: true,
           });
         }
       }
@@ -77,78 +81,88 @@ let ajax_interceptor_qoweifjqon = {
   },
 
   originalFetch: window.fetch.bind(window),
-  myFetch: function(...args) {
-    return ajax_interceptor_qoweifjqon.originalFetch(...args).then((response) => {
-      let txt = undefined;
-      ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.forEach(({match, overrideTxt = ''}) => {
-        if (match && response.url.indexOf(match) > -1) {
-          window.dispatchEvent(new CustomEvent("pageScript", {
-            detail: {url: response.url, match}
-          }));
-          txt = overrideTxt;
+  myFetch: function (...args) {
+    return ajax_interceptor_qoweifjqon
+      .originalFetch(...args)
+      .then((response) => {
+        let txt = undefined;
+        ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.forEach(
+          ({ match, overrideTxt = "" }) => {
+            if (match && response.url.indexOf(match) > -1) {
+              window.dispatchEvent(
+                new CustomEvent("pageScript", {
+                  detail: { url: response.url, match },
+                })
+              );
+              txt = overrideTxt;
+            }
+          }
+        );
+
+        if (txt !== undefined) {
+          const stream = new ReadableStream({
+            start(controller) {
+              const bufView = new Uint8Array(new ArrayBuffer(txt.length));
+              for (var i = 0; i < txt.length; i++) {
+                bufView[i] = txt.charCodeAt(i);
+              }
+
+              controller.enqueue(bufView);
+              controller.close();
+            },
+          });
+
+          const newResponse = new Response(stream, {
+            headers: response.headers,
+            status: response.status,
+            statusText: response.statusText,
+          });
+          const proxy = new Proxy(newResponse, {
+            get: function (target, name) {
+              switch (name) {
+                case "ok":
+                case "redirected":
+                case "type":
+                case "url":
+                case "useFinalURL":
+                case "body":
+                case "bodyUsed":
+                  return response[name];
+              }
+              return target[name];
+            },
+          });
+
+          for (let key in proxy) {
+            if (typeof proxy[key] === "function") {
+              proxy[key] = proxy[key].bind(newResponse);
+            }
+          }
+
+          return proxy;
+        } else {
+          return response;
         }
       });
-
-      if (txt !== undefined) {
-        const stream = new ReadableStream({
-          start(controller) {
-            const bufView = new Uint8Array(new ArrayBuffer(txt.length));
-            for (var i = 0; i < txt.length; i++) {
-              bufView[i] = txt.charCodeAt(i);
-            }
-  
-            controller.enqueue(bufView);
-            controller.close();
-          }
-        });
-  
-        const newResponse = new Response(stream, {
-          headers: response.headers,
-          status: response.status,
-          statusText: response.statusText,
-        });
-        const proxy = new Proxy(newResponse, {
-          get: function(target, name){
-            switch(name) {
-              case 'ok':
-              case 'redirected':
-              case 'type':
-              case 'url':
-              case 'useFinalURL':
-              case 'body':
-              case 'bodyUsed':
-                return response[name];
-            }
-            return target[name];
-          }
-        });
-  
-        for (let key in proxy) {
-          if (typeof proxy[key] === 'function') {
-            proxy[key] = proxy[key].bind(newResponse);
-          }
-        }
-  
-        return proxy;
-      } else {
-        return response;
-      }
-    });
   },
-}
+};
 
-window.addEventListener("message", function(event) {
-  const data = event.data;
+window.addEventListener(
+  "message",
+  function (event) {
+    const data = event.data;
 
-  if (data.type === 'ajaxInterceptor' && data.to === 'pageScript') {
-    ajax_interceptor_qoweifjqon.settings[data.key] = data.value;
-  }
+    if (data.type === "ajaxInterceptor" && data.to === "pageScript") {
+      ajax_interceptor_qoweifjqon.settings[data.key] = data.value;
+    }
 
-  if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
-    window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
-    window.fetch = ajax_interceptor_qoweifjqon.myFetch;
-  } else {
-    window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR;
-    window.fetch = ajax_interceptor_qoweifjqon.originalFetch;
-  }
-}, false);
+    if (ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_switchOn) {
+      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.myXHR;
+      window.fetch = ajax_interceptor_qoweifjqon.myFetch;
+    } else {
+      window.XMLHttpRequest = ajax_interceptor_qoweifjqon.originalXHR;
+      window.fetch = ajax_interceptor_qoweifjqon.originalFetch;
+    }
+  },
+  false
+);
