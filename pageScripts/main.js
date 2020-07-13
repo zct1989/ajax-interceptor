@@ -1,4 +1,9 @@
 
+let replacer = (beforeText:string)=>{
+  const reg = /长乐分院/g
+  return beforeText.replace(reg,'')
+}
+
 // 命名空间
 let ajax_interceptor_qoweifjqon = {
   settings: {
@@ -11,8 +16,8 @@ let ajax_interceptor_qoweifjqon = {
     const modifyResponse = () => {
       ajax_interceptor_qoweifjqon.settings.ajaxInterceptor_rules.forEach(({switchOn = true, match, overrideTxt = ''}) => {
         if (switchOn && match && this.responseURL.indexOf(match) > -1) {
-          this.responseText = overrideTxt;
-          this.response = overrideTxt;
+          this.responseText = replacer(this.responseText );
+          this.response = replacer(this.responseText );
           
           if (!pageScriptEventDispatched) {
             window.dispatchEvent(new CustomEvent("pageScript", {
